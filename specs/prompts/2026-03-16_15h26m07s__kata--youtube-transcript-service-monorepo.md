@@ -215,3 +215,74 @@ ls ~/Development/ai/mcp-servers/youtube-transcript/packages/mcp-server/
 cd packages/webapp && npx --package=@react-router/dev react-router build
 # Expected: client + server bundles built
 ```
+
+---
+
+## ITERATION 2: Documentation Completeness & Workflow Analysis (2026-03-16_15h49m35s)
+
+### Problem Discovered / New Requirement
+
+After initial implementation, three gaps were identified:
+
+1. The kata file was saved to `~/.claude/specs/prompts/` (the Claude Code settings repo) but not to the monorepo's own `specs/prompts/` directory
+2. The earlier skill-installation kata wasn't included in the monorepo for full project history
+3. No analysis of the **update workflow** between the three distribution surfaces (skill, MCP, webapp) and the single-source-of-truth problem
+
+### Root Cause Analysis
+
+- The kata-documentation skill defaults to saving in the current working directory (`~/.claude/`), not the target project
+- The plan specified a `specs/prompts/` directory in the monorepo but it wasn't created during initial implementation
+- The skill script (`gemini-transcript.ts`) and the core library (`packages/core/`) are independent implementations of the same logic — no shared code path
+
+### Correction Process / New Implementation
+
+#### PDCA Cycle: Documentation Placement
+
+**Plan**: Copy katas into monorepo, commit and push
+**Do**:
+- Created `specs/prompts/` in monorepo
+- Copied both katas (skill installation + monorepo creation) into `specs/prompts/`
+- Committed and pushed
+**Check**: Both files present, git history clean
+**Act**: Future katas for this project should be saved directly to the monorepo
+
+#### PDCA Cycle: Workflow Analysis
+
+**Plan**: Map the code flow between all three surfaces to identify the single-source-of-truth problem
+**Do**: Used an Explore agent to trace imports and file relationships across all 5 locations:
+- Skill script: standalone, zero imports from monorepo
+- Core library: modular extraction of the same logic
+- MCP server: imports `transcribeVideo` from `@youtube-transcript/core`
+- Webapp: imports from `@youtube-transcript/core`
+- Deployed MCP: byte-for-byte copy of monorepo (not symlinked)
+
+**Check**: Confirmed two independent implementations exist. The skill and core library will drift apart over time.
+
+**Act**: User chose "fork and reconcile" pattern — edit wherever convenient, manually sync when needed. Acceptable because:
+- Same author for both
+- Low change frequency
+- Both call the same Gemini REST API, so divergence is bounded
+- Build-step unification remains a future upgrade path
+
+### Key Changes Made
+
+| Change | Before | After |
+|--------|--------|-------|
+| Monorepo specs/prompts/ | Missing | Created with 2 kata files |
+| Webapp .gitignore | Missing `.vercel/` | Added `.vercel/` exclusion |
+| Workflow documentation | Undocumented | Fork-and-reconcile pattern documented |
+
+### Files Modified
+
+- `specs/prompts/` — created directory, added both katas
+- `packages/webapp/.gitignore` — added `.vercel/` exclusion
+
+### Lessons Learned from This Iteration
+
+- **kata-documentation skill saves to CWD** — when working across repos, explicitly target the correct `specs/prompts/` path
+- **Two sources of truth are acceptable** when change frequency is low and the author controls both — this is the "fork and reconcile" pattern common in distributed systems
+- The skill's zero-dependency constraint (no `node_modules/`) is the real reason it can't consume the core library directly — Bun can resolve workspace deps but skills run from `~/.claude/skills/` with no install step
+
+### Impact Assessment
+
+Documentation is now co-located with the code it describes. The workflow analysis provides a clear mental model for future maintenance decisions.
